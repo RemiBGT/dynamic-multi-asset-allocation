@@ -1,0 +1,5 @@
+regime,n_episodes,mean,median,min,max,suggested_label
+0,10,73.2,75.0,6,221,inflation_rates_shock
+1,25,42.16,27.0,1,188,recovery_or_normalization
+2,25,106.36,66.0,15,455,risk_on
+3,4,45.25,46.0,1,88,defensive_risk_off
