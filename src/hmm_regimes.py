@@ -542,3 +542,109 @@ def summarize_walk_forward_results(walk_forward_results: pd.DataFrame) -> Dict[s
         "n_regime_switches": n_switches,
         "switch_rate": n_switches / max(len(valid) - 1, 1),
     }
+
+def walk_forward_hmm_detection_expanding(
+    features: pd.DataFrame,
+    n_components: int,
+    min_train_years: int = 5,
+    covariance_type: str = "full",
+    min_train_observations: int = 1260,
+    n_iter: int = 1000,
+) -> pd.DataFrame:
+    """
+    Monthly walk-forward HMM regime detection with an expanding training window.
+
+    At each month-end date:
+    - use all data available from the beginning up to the decision date;
+    - require at least min_train_years of history;
+    - fit scaler and HMM only on past data;
+    - infer the current regime at the decision date.
+    """
+    decision_dates = get_month_end_dates(features.index)
+    rows = []
+
+    first_available_date = features.index.min()
+
+    for decision_date in decision_dates:
+        earliest_allowed_date = first_available_date + pd.DateOffset(
+            years=min_train_years
+        )
+
+        if decision_date < earliest_allowed_date:
+            continue
+
+        train_features = features.loc[:decision_date].dropna()
+
+        if len(train_features) < min_train_observations:
+            continue
+
+        try:
+            fit_result = fit_gaussian_hmm(
+                features=train_features,
+                n_components=n_components,
+                covariance_type=covariance_type,
+                n_iter=n_iter,
+            )
+        except Exception as error:
+            rows.append(
+                {
+                    "date": decision_date,
+                    "n_components": n_components,
+                    "error": str(error),
+                }
+            )
+            continue
+
+        current_probs = fit_result.probabilities.iloc[-1]
+        current_regime = int(current_probs.values.argmax())
+        current_regime_probability = float(current_probs.max())
+
+        next_probs = current_probs.values @ fit_result.model.transmat_
+        next_regime = int(np.argmax(next_probs))
+        next_regime_probability = float(np.max(next_probs))
+
+        feature_summary = compute_regime_feature_summary(
+            train_features,
+            fit_result.states,
+        )
+
+        labels = suggest_regime_labels(feature_summary)
+
+        row = {
+            "date": decision_date,
+            "n_components": n_components,
+            "train_start": train_features.index.min(),
+            "train_end": train_features.index.max(),
+            "train_observations": len(train_features),
+            "log_likelihood": fit_result.log_likelihood,
+            "converged": fit_result.converged,
+            "current_regime": current_regime,
+            "current_regime_label": labels.get(
+                current_regime,
+                f"regime_{current_regime}",
+            ),
+            "current_regime_probability": current_regime_probability,
+            "next_regime": next_regime,
+            "next_regime_label": labels.get(
+                next_regime,
+                f"regime_{next_regime}",
+            ),
+            "next_regime_probability": next_regime_probability,
+            "error": "",
+        }
+
+        for i, probability in enumerate(current_probs.values):
+            row[f"current_prob_regime_{i}"] = probability
+            row[f"label_regime_{i}"] = labels.get(i, f"regime_{i}")
+
+        for i, probability in enumerate(next_probs):
+            row[f"next_prob_regime_{i}"] = probability
+
+        rows.append(row)
+
+    result = pd.DataFrame(rows)
+
+    if not result.empty and "date" in result.columns:
+        result = result.sort_values("date").set_index("date")
+
+    return result   

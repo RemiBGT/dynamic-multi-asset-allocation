@@ -1,15 +1,36 @@
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
 .venv/
+venv/
+env/
+
+# Jupyter
 .ipynb_checkpoints/
 
-# Data
-data/raw/*.csv
-data/processed/*.csv
-
-# System
+# OS files
 .DS_Store
+Thumbs.db
 
-# VS Code
+# VS Code local settings
 .vscode/
+
+# Raw and processed data
+data/raw/
+data/processed/
+
+# Intermediate reports
+reports/hmm/
+reports/backtests/
+reports/improvements/
+
+# Keep final report outputs
+!reports/
+!reports/final/
+!reports/final/**
+!reports/features/
+!reports/features/feature_correlation_heatmap.png
